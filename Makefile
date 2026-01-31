@@ -51,5 +51,5 @@ endif
 
 clean:
 	$(BASIC_CLEAN)
-	rm -f $(MODELS) *.cd
+	cd ecolab; $(MAKE) clean
 
