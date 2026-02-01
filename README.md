@@ -11,7 +11,7 @@ An EcoLab project for exploring Star Complexity of Networks
 
     make -j
     make -j OPENMP=1 (SMP multithreading)
-    make -j DPCPP=1  (GPU support via OneAPI. Additional compiler flags required for NVidia GPUs)
+    make -j DPCPP=1  (GPU support via OneAPI. Additional compiler flags required for NVidia GPUs). Note the GPU build currently produces incorrect results for graphs of 7 stars or higher.
 
 # To run:
   python3 starcomplexity.py

@@ -720,15 +720,59 @@ unsigned starUpperBoundABC(linkRep x, const ElemStars& elemStars)
   AIG aig;
   // build the remaining edges into an AIG
   aig.setInputs(nodes);
-  vector<abc::Abc_Obj_t*> edges;
+
+
+  // simple minded i∩j representation of each link
+//  vector<abc::Abc_Obj_t*> edges;
+//  for (unsigned i=0; i<nodes; ++i)
+//    for (unsigned j=0; j<i; ++j)
+//      if (x(i,j))
+//        edges.push_back(&aig.addAnd(aig.input(i),aig.input(j)));
+//  abc::Abc_Obj_t* graphRemainder=edges[0];
+//  for (size_t i=1; i<edges.size(); ++i)
+//    graphRemainder=&aig.addOr(*graphRemainder, *edges[i]);
+
+  // calculate node degree
+  map<unsigned,unsigned> nodeDegree;
   for (unsigned i=0; i<nodes; ++i)
     for (unsigned j=0; j<i; ++j)
       if (x(i,j))
-        edges.push_back(&aig.addAnd(aig.input(i),aig.input(j)));
-  abc::Abc_Obj_t* graphRemainder=edges[0];
-  for (size_t i=1; i<edges.size(); ++i)
-    graphRemainder=&aig.addOr(*graphRemainder, *edges[i]);
-  assert(aig.numGates()==2*edges.size()-1);
+        {
+          ++nodeDegree[i];
+          ++nodeDegree[j];
+        }
+
+  abc::Abc_Obj_t* graphRemainder=nullptr;
+  for (;;)
+    {
+      auto maxDegree=max_element(nodeDegree.begin(), nodeDegree.end(), SecondLess())->second;
+      if (maxDegree==0) break; // all edges accouint for
+
+      // determine minimum combination
+      unsigned stars=numeric_limits<unsigned>::max();
+      size_t minRootNode=nodes;
+      for (auto& n: nodeDegree)
+        if (n.second==maxDegree)
+          if (auto s=combineTerms(n.first, nodeDegree, x); s<stars)
+            {
+              stars=s;
+              minRootNode=n.first;
+            }
+      assert(minRootNode<nodes);
+  
+      abc::Abc_Obj_t* nbrList=nullptr;
+      for (unsigned i=0; i<nodes; ++i)
+        if (nodeDegree[i] && x(i,minRootNode))
+          {
+            nbrList=nbrList? &aig.addOr(*nbrList, aig.input(i)): &aig.input(i);
+            --nodeDegree[i];
+          }
+      nodeDegree[minRootNode]=0;
+      assert(nbrList);
+      nbrList=&aig.addAnd(*nbrList, aig.input(minRootNode));
+      graphRemainder=graphRemainder? &aig.addOr(*graphRemainder, *nbrList): nbrList;
+    }
+      
   aig.addOutputs(*graphRemainder);
   assert(aig.eval(elemStars)==x);
   aig.cleanup();

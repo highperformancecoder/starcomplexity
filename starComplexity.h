@@ -148,7 +148,7 @@ struct GraphComplexity
   double complexity;
 };
 
-struct StarComplexityGen
+struct StarComplexityGen: public ecolab::Model<StarComplexityGen>
 {
   unsigned maxNumGraphs=100000000;
   size_t blockSize=128;
@@ -177,4 +177,3 @@ struct StarComplexityGen
   /// randomly generate an ER graph, and return the starUpperBound and complexity
   GraphComplexity randomERGraph(unsigned nodes, unsigned links);
 };
-
