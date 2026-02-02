@@ -148,8 +148,9 @@ struct GraphComplexity
   double complexity;
 };
 
-struct StarComplexityGen: public ecolab::Model<StarComplexityGen>
+class StarComplexityGen: public ecolab::Model<StarComplexityGen>
 {
+public:
   unsigned maxNumGraphs=100000000;
   size_t blockSize=128;
   // star complexity registry
@@ -165,15 +166,22 @@ struct StarComplexityGen: public ecolab::Model<StarComplexityGen>
   linkRep complement(linkRep) const;
   unsigned symmStar(linkRep) const;
   GraphComplexity complexity(linkRep) const;
-
+  /// return list of edges
+  std::vector<std::vector<unsigned> > edges(const linkRep&);
+  
   /// return an upper bound on the number of stars in the link representation
   unsigned starUpperBound(const linkRep&) const;
   /// star upper bound using ABC library
-  unsigned starUpperBoundABC(const linkRep&) const;
+  unsigned starUpperBoundABC(const linkRep&);
+  /// recipe from last starUpperBoundABC calculation
+  std::string ABCrecipe;
   
   /// random number generator
   ecolab::urand uni;
   
   /// randomly generate an ER graph, and return the starUpperBound and complexity
   GraphComplexity randomERGraph(unsigned nodes, unsigned links);
+private:
+  CLASSDESC_ACCESS(StarComplexityGen);
+  unsigned starUpperBoundABCImpl(linkRep x);
 };

@@ -615,6 +615,16 @@ GraphComplexity StarComplexityGen::complexity(linkRep g) const
   return r;
 }
 
+std::vector<std::vector<unsigned>> StarComplexityGen::edges(const linkRep& x)
+{
+  std::vector<std::vector<unsigned>> r;
+  for (unsigned i=0; i<elemStars.size(); ++i)
+    for (unsigned j=0; j<i; ++j)
+      if (x(i,j))
+        r.emplace_back(std::vector{i,j});
+  return r;
+}
+
 struct SecondLess
 {
   bool operator()(const pair<unsigned,unsigned>& x, const pair<unsigned,unsigned>& y)
@@ -697,7 +707,7 @@ unsigned StarComplexityGen::starUpperBound(const linkRep& x) const
   return min(ub, complementUb);
 }
 
-unsigned starUpperBoundABC(linkRep x, const ElemStars& elemStars)
+unsigned StarComplexityGen::starUpperBoundABCImpl(linkRep x)
 {
   if (x.empty()) return 3; // intersection of 3 stars is empty.
   // Firstly remove those nodes that are full stars
@@ -795,14 +805,18 @@ unsigned starUpperBoundABC(linkRep x, const ElemStars& elemStars)
       assert(aig.eval(elemStars)==x);
       if (aig.numGates()==prevNumGates) break; // terminate on no improvement
     }
+  
+  ABCrecipe=aig.recipe();
   return fullStars.size()+aig.numGates()+1;
 }
 
-unsigned StarComplexityGen::starUpperBoundABC(const linkRep& x) const
+unsigned StarComplexityGen::starUpperBoundABC(const linkRep& x)
 {
-  unsigned ub=::starUpperBoundABC(x, elemStars);
-  unsigned complementUb=::starUpperBoundABC((~x).maskOut(elemStars.size()), elemStars);
+  unsigned ub=starUpperBoundABCImpl(x);
+  auto savedRecipe=ABCrecipe;
+  unsigned complementUb=starUpperBoundABCImpl((~x).maskOut(elemStars.size()));
   assert(ub>0 && complementUb>0);
+  if (ub<complementUb) swap(savedRecipe, ABCrecipe); // ensure we get the recipe corresponding to minimum no of operations
   return min(ub, complementUb);
 }
 

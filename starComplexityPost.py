@@ -24,5 +24,7 @@ with open(f'{nodes}-{maxStars}Post.csv','w') as out:
         starUpperBound=starC.starUpperBound(i)-1
         starUpperBoundABC=starC.starUpperBoundABC(i)-1
         print(id,bin(num),links,symmStar,starUpperBound,starUpperBoundABC,c.complexity(),c.starComplexity(),starC.counts[i],starC.recipe[i],sep=',',file=out)
-        if symmStar!=starUpperBoundABC: print(symmStar,starUpperBound,starUpperBoundABC,starC.recipe[i])
+        if starUpperBoundABC<symmStar:
+            print(symmStar,starUpperBound,starUpperBoundABC,starC.recipe[i],starC.ABCrecipe())
+            print(starC.edges(i)())
         id+=1

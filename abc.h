@@ -116,6 +116,47 @@ public:
       auto r=workspace[abc::Abc_ObjFaninId0(&output(0))];
       return abc::Abc_ObjFaninC0(&output(0))? ~r: r;
     }
+
+    string recipe() const {
+      assert(numOutputs()==1);
+      std::vector<std::string> workspace(Abc_NtkObjNumMax(aig));
+      for (unsigned i=0; i<numInputs(); ++i)
+        workspace[abc::Abc_ObjId(&this->input(i))]=std::to_string(i);
+      AbcNodes orderedNodes(aig);
+      for (auto obj: orderedNodes)
+        if (obj)
+          {          
+            auto v0=workspace[abc::Abc_ObjFaninId0(obj)];
+            auto v1=workspace[abc::Abc_ObjFaninId1(obj)];
+            static const string neg="¬";
+            if (abc::Abc_ObjFaninC0(obj) && abc::Abc_ObjFaninC1(obj))
+              {
+                // convert negated inputs into the equivalent or operation
+                workspace[abc::Abc_ObjId(obj)]="¬("+v0+"∪"+v1+")";
+              }
+            else
+              {
+                // Apply inversions if the edges are complemented
+                if (abc::Abc_ObjFaninC0(obj))
+                  {
+                    if (v0.starts_with(neg))
+                      v0=v0.substr(neg.size());
+                    else
+                      v0 = neg+v0;
+                  }
+                if (abc::Abc_ObjFaninC1(obj))
+                  {
+                    if (v1.starts_with(neg))
+                      v1=v1.substr(neg.size());
+                    else
+                      v1 = neg+v1;
+                  }
+                workspace[abc::Abc_ObjId(obj)] = "("+v0+"∩"+v1+")";
+              }
+          }
+      auto r=workspace[abc::Abc_ObjFaninId0(&output(0))];
+      return abc::Abc_ObjFaninC0(&output(0))? "¬"+r: r;
+    }
   };
 }
 
