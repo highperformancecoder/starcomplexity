@@ -157,7 +157,7 @@ struct EvalStackData
     elemStars(elemStars.size()), pos(numStars)
   {
     for (unsigned i=2; i<numStars; ++i)
-      numGraphs*=min(unsigned(elemStars.size()),(i+1));
+      numGraphs*=min(unsigned(elemStars.size()+1),(i+2));
 #ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(elemStars.data(), this->elemStars.begin(), elemStars.size());
     syclQ().wait();
@@ -184,7 +184,7 @@ struct EvalStack
     auto pos=&data.pos[0];
 
     string r;
-    for (unsigned p=0, opIdx=0, starIdx=2, range=3; p<recipeSize; ++p)
+    for (unsigned p=0, opIdx=0, starIdx=2, range=4; p<recipeSize; ++p)
       if (p<2)
         {
           r+=to_string(p)+";";
@@ -196,11 +196,17 @@ struct EvalStack
           auto divResult=div(int(idx), int(range));
           if (stackTop<numStars)
             {
-              r+=to_string(divResult.rem)+";";
+              if (divResult.rem==range-1) // duplicate top of stack
+                if (stackTop>0)
+                  r+="^;";
+                else
+                  r+="0;";
+              else
+                r+=to_string(divResult.rem)+";";
               stackTop++;
             }
           idx=divResult.quot;
-          if (range<nodes) ++range;
+          if (range<nodes+1) ++range;
           ++starIdx;
         }
       else
@@ -230,7 +236,7 @@ struct EvalStack
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
     linkRep stack[maxStars];
-    for (unsigned p=0, opIdx=0, starIdx=2, range=3, ii=idx; p<recipeSize; ++p)
+    for (unsigned p=0, opIdx=0, starIdx=2, range=4, ii=idx; p<recipeSize; ++p)
       if (p<2)
         stack[stackTop++]=elemStars[p];
       else if (starIdx<numStars && pos[starIdx]==int(p)) // push a star, according to idx
@@ -238,9 +244,13 @@ struct EvalStack
           assert(stackTop<numStars);
           auto divResult=div(int(ii), int(range));
           if (stackTop<numStars)
-            stack[stackTop++]=elemStars[divResult.rem];
+            if (divResult.rem==range-1) // duplicate top of stack
+              stack[stackTop]=stackTop>0? stack[stackTop-1]: 0;
+            else
+              stack[stackTop]=elemStars[divResult.rem];
+          stackTop++;
           ii=divResult.quot;
-          if (range<nodes) ++range;
+          if (range<nodes+1) ++range;
           ++starIdx;
         }
       else
@@ -274,7 +284,7 @@ const linkRep noGraph=~linkRep(0);
 class OutputBuffer
 {
 public:
-  static constexpr size_t maxQ=20000;
+  static constexpr size_t maxQ=40000;
   using size_type=unsigned;
   using iterator=linkRep*;
   void push_back(linkRep x) {
@@ -615,13 +625,13 @@ GraphComplexity StarComplexityGen::complexity(linkRep g) const
   return r;
 }
 
-std::vector<std::vector<unsigned>> StarComplexityGen::edges(const linkRep& x)
+vector<tuple<unsigned,unsigned>> StarComplexityGen::edges(const linkRep& x)
 {
-  std::vector<std::vector<unsigned>> r;
+  vector<tuple<unsigned,unsigned>> r;
   for (unsigned i=0; i<elemStars.size(); ++i)
     for (unsigned j=0; j<i; ++j)
       if (x(i,j))
-        r.emplace_back(std::vector{i,j});
+        r.emplace_back(i,j);
   return r;
 }
 

@@ -167,7 +167,7 @@ public:
   unsigned symmStar(linkRep) const;
   GraphComplexity complexity(linkRep) const;
   /// return list of edges
-  std::vector<std::vector<unsigned> > edges(const linkRep&);
+  std::vector<std::tuple<unsigned,unsigned> > edges(const linkRep&);
   
   /// return an upper bound on the number of stars in the link representation
   unsigned starUpperBound(const linkRep&) const;
