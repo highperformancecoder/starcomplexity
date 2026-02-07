@@ -152,7 +152,11 @@ class StarComplexityGen: public ecolab::Model<StarComplexityGen>
 {
 public:
   unsigned maxNumGraphs=100000000;
+#ifdef _OPENMP
+  size_t blockSize=1024;
+#else
   size_t blockSize=128;
+#endif
   // star complexity registry
   std::map<linkRep,unsigned> starMap;
   std::map<linkRep,unsigned> counts; // counts the number of times linkRep is seen

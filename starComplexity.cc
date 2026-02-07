@@ -107,9 +107,9 @@ class Pos: public DeviceArray<int>
 #endif
   }
 public:
-  Pos(int numStars): DeviceArray<int>(numStars) {
+  Pos(int numStars): DeviceArray<int>(2*numStars) {
     assert(numStars>1);
-    for (int i=0; i<numStars; ++i) hostCopy.push_back(i);
+    for (int i=0; i<2*numStars; ++i) hostCopy.push_back(i);
 #ifdef SYCL_LANGUAGE_VERSION
     copy();
 #else
@@ -152,12 +152,13 @@ struct EvalStackData
   DeviceArray<linkRep> elemStars;
   Pos pos;
   unsigned numGraphs=1;
+  unsigned numStars;
 
   EvalStackData(const ElemStars&  elemStars, unsigned numStars):
-    elemStars(elemStars.size()), pos(numStars)
+    elemStars(elemStars.size()), pos(numStars), numStars(numStars)
   {
     for (unsigned i=2; i<numStars; ++i)
-      numGraphs*=min(unsigned(elemStars.size()+1),(i+2));
+      numGraphs*=min(unsigned(elemStars.size()+2),(i+2));
 #ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(elemStars.data(), this->elemStars.begin(), elemStars.size());
     syclQ().wait();
@@ -176,15 +177,16 @@ struct EvalStack
   string recipe(unsigned op, unsigned idx) const {
     unsigned stackTop=0;
     auto nodes=data.elemStars.size();
-    auto numStars=data.pos.size();
-    auto recipeSize=2*numStars-1;
+    auto numStars=data.numStars;
+    auto recipeSize=data.pos.size();
 
     assert(nodes<=maxNodes);
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
 
     string r;
-    for (unsigned p=0, opIdx=0, starIdx=2, range=4; p<recipeSize; ++p)
+    for (unsigned p=0, opIdx=0, starIdx=2, range=4;
+         stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         {
           r+=to_string(p)+";";
@@ -196,17 +198,18 @@ struct EvalStack
           auto divResult=div(int(idx), int(range));
           if (stackTop<numStars)
             {
-              if (divResult.rem==range-1) // duplicate top of stack
-                if (stackTop>0)
-                  r+="^;";
-                else
-                  r+="0;";
-              else
+              if (stackTop>0 && divResult.rem==range-1) // duplicate top of stack
+                r+="^";
+              else if (stackTop>1 && divResult.rem==range-2)
+                r+="↕";                                 // swap top two elements of stack
+              else if (divResult.rem<nodes)
                 r+=to_string(divResult.rem)+";";
+              else
+                r+="*";
               stackTop++;
             }
           idx=divResult.quot;
-          if (range<nodes+1) ++range;
+          if (range<nodes+2) ++range;
           ++starIdx;
         }
       else
@@ -229,14 +232,15 @@ struct EvalStack
   {
     unsigned stackTop=0;
     auto nodes=data.elemStars.size();
-    auto numStars=data.pos.size();
-    auto recipeSize=2*numStars-1;
+    auto numStars=data.numStars;
+    auto recipeSize=data.pos.size();
 
     assert(nodes<=maxNodes);
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
     linkRep stack[maxStars];
-    for (unsigned p=0, opIdx=0, starIdx=2, range=4, ii=idx; p<recipeSize; ++p)
+    for (unsigned p=0, opIdx=0, starIdx=2, range=5, ii=idx;
+         stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         stack[stackTop++]=elemStars[p];
       else if (starIdx<numStars && pos[starIdx]==int(p)) // push a star, according to idx
@@ -244,29 +248,32 @@ struct EvalStack
           assert(stackTop<numStars);
           auto divResult=div(int(ii), int(range));
           if (stackTop<numStars)
-            if (divResult.rem==range-1) // duplicate top of stack
-              stack[stackTop]=stackTop>0? stack[stackTop-1]: 0;
-            else
-              stack[stackTop]=elemStars[divResult.rem];
-          stackTop++;
+            {
+              if (stackTop>0 && divResult.rem==range-1) // duplicate top of stack
+                {
+                  stack[stackTop]=stack[stackTop-1];
+                  ++stackTop;
+                }
+              else if (stackTop>1 && divResult.rem==range-2)
+                swap(stack[stackTop-1], stack[stackTop-2]); // swap top two elements of stack
+              else if (divResult.rem<nodes)
+                stack[stackTop++]=elemStars[divResult.rem];
+              else
+                stack[stackTop++]=0;
+            }
           ii=divResult.quot;
-          if (range<nodes+1) ++range;
+          if (range<nodes+2) ++range;
           ++starIdx;
         }
       else
         {
           if (stackTop>1 && stackTop<=numStars)
             {
+              auto v=stack[--stackTop];
               if (op&(1<<opIdx)) // set intersection
-                {
-                  auto v=stack[--stackTop];
-                  stack[stackTop-1]&=v;
-                }
+                stack[stackTop-1]&=v;
               else                   // set union
-                {
-                  auto v=stack[--stackTop];
-                  stack[stackTop-1]|=v;
-                }
+                stack[stackTop-1]|=v;
             }
           ++opIdx;
         }
@@ -284,7 +291,7 @@ const linkRep noGraph=~linkRep(0);
 class OutputBuffer
 {
 public:
-  static constexpr size_t maxQ=40000;
+  static constexpr size_t maxQ=20000;
   using size_type=unsigned;
   using iterator=linkRep*;
   void push_back(linkRep x) {
@@ -331,7 +338,7 @@ struct BlockEvaluator: public EvalStackData
   {
     if (i+start<numGraphs)
       {
-        unsigned numOps=1<<(pos.size()-1);
+        unsigned numOps=1<<(numStars-1);
         for (unsigned op=0; op<numOps; ++op)
           {
             auto r=block[i].evalRecipe(op,i+start);
