@@ -158,7 +158,7 @@ struct EvalStackData
     elemStars(elemStars.size()), pos(numStars), numStars(numStars)
   {
     for (unsigned i=2; i<numStars; ++i)
-      numGraphs*=min(unsigned(elemStars.size()+2),(i+2));
+      numGraphs*=min(unsigned(elemStars.size()+2),(i+3));
 #ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(elemStars.data(), this->elemStars.begin(), elemStars.size());
     syclQ().wait();
@@ -185,7 +185,7 @@ struct EvalStack
     auto pos=&data.pos[0];
 
     string r;
-    for (unsigned p=0, opIdx=0, starIdx=2, range=4;
+    for (unsigned p=0, opIdx=0, starIdx=2, range=5;
          stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         {
@@ -348,15 +348,17 @@ struct BlockEvaluator: public EvalStackData
       }
   }
   
+#ifdef SYCL_LANGUAGE_VERSION
   vector<OutputBuffer> getResults() {
     vector<OutputBuffer> r(block.size());
-#ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(backedResult.begin(),r.data(),r.size()).wait();
-#else
-    r.swap(result);
-#endif
     return r;
   }
+#else
+  vector<OutputBuffer>& getResults() {
+    return result;
+  }
+#endif
   size_t size() const {return block.size();}
 };
 
@@ -385,7 +387,11 @@ void StarComplexityGen::fillStarMap(unsigned numStars)
 
   bool blown=false;
   auto populateStarMap=[&]() {
+#ifdef SYCL_LANGUAGE_VERSION
     auto resultsBlock=block->getResults();
+#else
+    auto& resultsBlock=block->getResults();
+#endif
     for (size_t j=0; j<resultsBlock.size(); ++j)
       {
         auto& results=resultsBlock[j];

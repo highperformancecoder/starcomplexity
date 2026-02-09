@@ -14,8 +14,8 @@ for l in range(L):
 print('maxStars=',maxStars)
 maxStars=9
 
-#starC.blockSize(256)
-starC.blockSize(4096)
+starC.blockSize(256)
+#starC.blockSize(4096)
 #starC.blockSize(8192)
 #starC.blockSize(17920)
 #starC.blockSize(40320)
