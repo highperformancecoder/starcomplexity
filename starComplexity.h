@@ -99,12 +99,13 @@ std::ostream& operator<<(std::ostream& o, const linkRepImpl<I>& x)
   return o;
 }
 
-//#ifdef SYCL_LANGUAGE_VERSION
+#ifdef SYCL_LANGUAGE_VERSION
 //using linkRep=linkRepImpl<VecBitSet<unsigned,4>>;
-//#else
 // on NUC, unsigned works best (32 bits)
 using linkRep=linkRepImpl<unsigned>;
-//#endif
+#else
+using linkRep=linkRepImpl<uint64_t>;
+#endif
 
 // Convert to/from a JSON array for Python conversion
 #define CLASSDESC_json_pack___linkRep
@@ -152,11 +153,7 @@ class StarComplexityGen: public ecolab::Model<StarComplexityGen>
 {
 public:
   unsigned maxNumGraphs=100000000;
-#ifdef _OPENMP
-  size_t blockSize=1024;
-#else
   size_t blockSize=128;
-#endif
   // star complexity registry
   std::map<linkRep,unsigned> starMap;
   std::map<linkRep,unsigned> counts; // counts the number of times linkRep is seen
