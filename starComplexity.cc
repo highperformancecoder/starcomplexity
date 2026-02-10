@@ -107,9 +107,9 @@ class Pos: public DeviceArray<int>
 #endif
   }
 public:
-  Pos(int numStars): DeviceArray<int>(numStars) {
+  Pos(int numStars): DeviceArray<int>(2*numStars) {
     assert(numStars>1);
-    for (int i=0; i<numStars; ++i) hostCopy.push_back(i);
+    for (int i=0; i<2*numStars; ++i) hostCopy.push_back(i);
 #ifdef SYCL_LANGUAGE_VERSION
     copy();
 #else
@@ -152,12 +152,13 @@ struct EvalStackData
   DeviceArray<linkRep> elemStars;
   Pos pos;
   unsigned numGraphs=1;
+  unsigned numStars;
 
   EvalStackData(const ElemStars&  elemStars, unsigned numStars):
-    elemStars(elemStars.size()), pos(numStars)
+    elemStars(elemStars.size()), pos(numStars), numStars(numStars)
   {
     for (unsigned i=2; i<numStars; ++i)
-      numGraphs*=min(unsigned(elemStars.size()),(i+1));
+      numGraphs*=min(unsigned(elemStars.size()+2),(i+3));
 #ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(elemStars.data(), this->elemStars.begin(), elemStars.size());
     syclQ().wait();
@@ -176,15 +177,16 @@ struct EvalStack
   string recipe(unsigned op, unsigned idx) const {
     unsigned stackTop=0;
     auto nodes=data.elemStars.size();
-    auto numStars=data.pos.size();
-    auto recipeSize=2*numStars-1;
+    auto numStars=data.numStars;
+    auto recipeSize=data.pos.size();
 
     assert(nodes<=maxNodes);
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
 
     string r;
-    for (unsigned p=0, opIdx=0, starIdx=2, range=3; p<recipeSize; ++p)
+    for (unsigned p=0, opIdx=0, starIdx=2, range=5;
+         stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         {
           r+=to_string(p)+";";
@@ -196,11 +198,18 @@ struct EvalStack
           auto divResult=div(int(idx), int(range));
           if (stackTop<numStars)
             {
-              r+=to_string(divResult.rem)+";";
+              if (stackTop>0 && divResult.rem==range-1) // duplicate top of stack
+                r+="^";
+              else if (stackTop>1 && divResult.rem==range-2)
+                r+="↕";                                 // swap top two elements of stack
+              else if (divResult.rem<nodes)
+                r+=to_string(divResult.rem)+";";
+              else
+                r+="*";
               stackTop++;
             }
           idx=divResult.quot;
-          if (range<nodes) ++range;
+          if (range<nodes+2) ++range;
           ++starIdx;
         }
       else
@@ -223,14 +232,15 @@ struct EvalStack
   {
     unsigned stackTop=0;
     auto nodes=data.elemStars.size();
-    auto numStars=data.pos.size();
-    auto recipeSize=2*numStars-1;
+    auto numStars=data.numStars;
+    auto recipeSize=data.pos.size();
 
     assert(nodes<=maxNodes);
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
     linkRep stack[maxStars];
-    for (unsigned p=0, opIdx=0, starIdx=2, range=3, ii=idx; p<recipeSize; ++p)
+    for (unsigned p=0, opIdx=0, starIdx=2, range=5, ii=idx;
+         stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         stack[stackTop++]=elemStars[p];
       else if (starIdx<numStars && pos[starIdx]==int(p)) // push a star, according to idx
@@ -238,25 +248,32 @@ struct EvalStack
           assert(stackTop<numStars);
           auto divResult=div(int(ii), int(range));
           if (stackTop<numStars)
-            stack[stackTop++]=elemStars[divResult.rem];
+            {
+              if (stackTop>0 && divResult.rem==range-1) // duplicate top of stack
+                {
+                  stack[stackTop]=stack[stackTop-1];
+                  ++stackTop;
+                }
+              else if (stackTop>1 && divResult.rem==range-2)
+                swap(stack[stackTop-1], stack[stackTop-2]); // swap top two elements of stack
+              else if (divResult.rem<nodes)
+                stack[stackTop++]=elemStars[divResult.rem];
+              else
+                stack[stackTop++]=0;
+            }
           ii=divResult.quot;
-          if (range<nodes) ++range;
+          if (range<nodes+2) ++range;
           ++starIdx;
         }
       else
         {
           if (stackTop>1 && stackTop<=numStars)
             {
+              auto v=stack[--stackTop];
               if (op&(1<<opIdx)) // set intersection
-                {
-                  auto v=stack[--stackTop];
-                  stack[stackTop-1]&=v;
-                }
+                stack[stackTop-1]&=v;
               else                   // set union
-                {
-                  auto v=stack[--stackTop];
-                  stack[stackTop-1]|=v;
-                }
+                stack[stackTop-1]|=v;
             }
           ++opIdx;
         }
@@ -321,7 +338,7 @@ struct BlockEvaluator: public EvalStackData
   {
     if (i+start<numGraphs)
       {
-        unsigned numOps=1<<(pos.size()-1);
+        unsigned numOps=1<<(numStars-1);
         for (unsigned op=0; op<numOps; ++op)
           {
             auto r=block[i].evalRecipe(op,i+start);
@@ -331,15 +348,17 @@ struct BlockEvaluator: public EvalStackData
       }
   }
   
+#ifdef SYCL_LANGUAGE_VERSION
   vector<OutputBuffer> getResults() {
     vector<OutputBuffer> r(block.size());
-#ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(backedResult.begin(),r.data(),r.size()).wait();
-#else
-    r.swap(result);
-#endif
     return r;
   }
+#else
+  vector<OutputBuffer>& getResults() {
+    return result;
+  }
+#endif
   size_t size() const {return block.size();}
 };
 
@@ -368,7 +387,11 @@ void StarComplexityGen::fillStarMap(unsigned numStars)
 
   bool blown=false;
   auto populateStarMap=[&]() {
+#ifdef SYCL_LANGUAGE_VERSION
     auto resultsBlock=block->getResults();
+#else
+    auto& resultsBlock=block->getResults();
+#endif
     for (size_t j=0; j<resultsBlock.size(); ++j)
       {
         auto& results=resultsBlock[j];
@@ -615,13 +638,13 @@ GraphComplexity StarComplexityGen::complexity(linkRep g) const
   return r;
 }
 
-std::vector<std::vector<unsigned>> StarComplexityGen::edges(const linkRep& x)
+vector<tuple<unsigned,unsigned>> StarComplexityGen::edges(const linkRep& x)
 {
-  std::vector<std::vector<unsigned>> r;
+  vector<tuple<unsigned,unsigned>> r;
   for (unsigned i=0; i<elemStars.size(); ++i)
     for (unsigned j=0; j<i; ++j)
       if (x(i,j))
-        r.emplace_back(std::vector{i,j});
+        r.emplace_back(i,j);
   return r;
 }
 

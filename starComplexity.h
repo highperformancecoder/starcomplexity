@@ -99,12 +99,13 @@ std::ostream& operator<<(std::ostream& o, const linkRepImpl<I>& x)
   return o;
 }
 
-//#ifdef SYCL_LANGUAGE_VERSION
+#ifdef SYCL_LANGUAGE_VERSION
 //using linkRep=linkRepImpl<VecBitSet<unsigned,4>>;
-//#else
 // on NUC, unsigned works best (32 bits)
 using linkRep=linkRepImpl<unsigned>;
-//#endif
+#else
+using linkRep=linkRepImpl<uint64_t>;
+#endif
 
 // Convert to/from a JSON array for Python conversion
 #define CLASSDESC_json_pack___linkRep
@@ -168,7 +169,7 @@ public:
   unsigned symmStar(linkRep) const;
   GraphComplexity complexity(linkRep) const;
   /// return list of edges
-  std::vector<std::vector<unsigned> > edges(const linkRep&);
+  std::vector<std::tuple<unsigned,unsigned> > edges(const linkRep&);
   
   /// return an upper bound on the number of stars in the link representation
   unsigned starUpperBound(const linkRep&) const;
