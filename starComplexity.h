@@ -144,7 +144,8 @@ static_assert(sizeof(linkRep)*8 > (maxNodes*(maxNodes-1))/2);
 using ElemStars=std::vector<linkRep>;
 struct GraphComplexity
 {
-  double starComplexity;
+  double starComplexity; // \bar{*}
+  double starComplexityABC; // \bar{*}_{ABC}
   double complexity;
 };
 

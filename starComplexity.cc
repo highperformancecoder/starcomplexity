@@ -835,7 +835,8 @@ GraphComplexity StarComplexityGen::randomERGraph(unsigned nodes, unsigned links)
     }
 
   GraphComplexity r;
-  r.starComplexity=::starUpperBound(g,nodes);
+  r.starComplexity=starUpperBound(g);
+  r.starComplexityABC=starUpperBoundABC(g);
   NautyRep ng=toNautyRep(g, nodes);
   r.complexity=ecolab::complexity(ng, true);
   return r;
