@@ -2,7 +2,7 @@
 #print(ecolab.device())
 
 from starComplexity import starC
-nodes=22
+nodes=10
 maxStars=9
 starC.restart(f'{nodes}-{maxStars}.ckpt');
 

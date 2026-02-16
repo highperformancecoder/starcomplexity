@@ -186,13 +186,13 @@ struct EvalStack
 
     string r;
     for (unsigned p=0, opIdx=0, starIdx=2, range=4;
-         stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
+         stackTop<=numStars && opIdx<numStars-1 && starIdx<=recipeSize; ++p)
       if (p<2)
         {
           r+=to_string(p)+";";
           stackTop++;
         }
-      else if (starIdx<numStars && pos[starIdx]==int(p)) // push a star, according to idx
+      else if (starIdx<recipeSize && pos[starIdx]==int(p)) // push a star, according to idx
         {
           assert(stackTop<numStars);
           auto divResult=div(int(idx), int(range));
@@ -240,10 +240,10 @@ struct EvalStack
     auto pos=&data.pos[0];
     linkRep stack[maxStars];
     for (unsigned p=0, opIdx=0, starIdx=2, range=4, ii=idx;
-         stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
+         stackTop<=numStars && opIdx<numStars-1 && starIdx<=recipeSize; ++p)
       if (p<2)
         stack[stackTop++]=elemStars[p];
-      else if (starIdx<numStars && pos[starIdx]==int(p)) // push a star, according to idx
+      else if (starIdx<recipeSize && pos[starIdx]==int(p)) // push a star, according to idx
         {
           assert(stackTop<numStars);
           auto divResult=div(int(ii), int(range));
@@ -275,7 +275,7 @@ struct EvalStack
               if (rollMask&(1<<opIdx))
                 { // circular shift ("roll") stack
                   auto top=stack[stackTop-1];
-                  memmove(stack+stackTop-1, stack+stackTop-2, stackTop-1);
+                  memmove(stack+1, stack+2, stackTop-1);
                   stack[0]=top;
                 }
             }
@@ -296,7 +296,7 @@ const linkRep noGraph=~linkRep(0);
 class OutputBuffer
 {
 public:
-  static constexpr size_t maxQ=40000;
+  static constexpr size_t maxQ=1000000;
   using size_type=unsigned;
   using iterator=linkRep*;
   void push_back(linkRep x) {
@@ -498,6 +498,9 @@ void StarComplexityGen::fillStarMap(unsigned numStars)
         for (unsigned j=0; j<blockSize; ++j)
           block->eval(i,j);
       populateStarMap();
+      block->alreadySeen.clear();
+      for (auto& i: starMap)
+        block->alreadySeen.push_back(i.first);
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
