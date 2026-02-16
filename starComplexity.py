@@ -3,7 +3,7 @@
 
 from starComplexity import starC
 from datetime import datetime
-nodes=22
+nodes=10
 # computed from max_{l\in[0,L]}min(n+L-l,2l) where L=n(n-1)/2
 maxStars=7
 L=int(0.5*nodes*(nodes-1))

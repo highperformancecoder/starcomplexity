@@ -1,5 +1,5 @@
 // hard code maximum number of nodes
-constexpr unsigned maxNodes=22, maxStars=2*maxNodes-1;
+constexpr unsigned maxNodes=10, maxStars=2*maxNodes-1;
 
 #include "netcomplexity.h"
 
@@ -16,7 +16,7 @@ private:
   Impl data[linkRepImpl<I>::size];
   CLASSDESC_ACCESS(linkRepImpl);
 public:
-  unsigned op=0, idx=0; // cached recipe parameters
+  unsigned op=0, rollMask=0, idx=0; // cached recipe parameters
   linkRepImpl()=default;
   linkRepImpl(unsigned x) {
     static_assert(sizeof(data)>=sizeof(x));

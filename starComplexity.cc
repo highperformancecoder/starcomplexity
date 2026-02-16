@@ -107,9 +107,9 @@ class Pos: public DeviceArray<int>
 #endif
   }
 public:
-  Pos(int numStars): DeviceArray<int>(2*numStars) {
+  Pos(int numStars): DeviceArray<int>(numStars) {
     assert(numStars>1);
-    for (int i=0; i<2*numStars; ++i) hostCopy.push_back(i);
+    for (int i=0; i<numStars; ++i) hostCopy.push_back(i);
 #ifdef SYCL_LANGUAGE_VERSION
     copy();
 #else
@@ -158,7 +158,7 @@ struct EvalStackData
     elemStars(elemStars.size()), pos(numStars), numStars(numStars)
   {
     for (unsigned i=2; i<numStars; ++i)
-      numGraphs*=min(unsigned(elemStars.size()+2),(i+3));
+      numGraphs*=min(unsigned(elemStars.size()+1),(i+2));
 #ifdef SYCL_LANGUAGE_VERSION
     syclQ().copy(elemStars.data(), this->elemStars.begin(), elemStars.size());
     syclQ().wait();
@@ -174,7 +174,7 @@ struct EvalStack
   EvalStack(const EvalStackData& data): data(data)  { }
 
   /// return a string representation of the recipe
-  string recipe(unsigned op, unsigned idx) const {
+  string recipe(unsigned op, unsigned rollMask, unsigned idx) const {
     unsigned stackTop=0;
     auto nodes=data.elemStars.size();
     auto numStars=data.numStars;
@@ -185,7 +185,7 @@ struct EvalStack
     auto pos=&data.pos[0];
 
     string r;
-    for (unsigned p=0, opIdx=0, starIdx=2, range=5;
+    for (unsigned p=0, opIdx=0, starIdx=2, range=4;
          stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         {
@@ -200,8 +200,6 @@ struct EvalStack
             {
               if (stackTop>0 && divResult.rem==range-1) // duplicate top of stack
                 r+="^";
-              else if (stackTop>1 && divResult.rem==range-2)
-                r+="↕";                                 // swap top two elements of stack
               else if (divResult.rem<nodes)
                 r+=to_string(divResult.rem)+";";
               else
@@ -221,6 +219,8 @@ struct EvalStack
               else                   // set union
                 r+="|";
               --stackTop;
+              if (rollMask&(1<<opIdx))
+                r+="↺";
             }
           ++opIdx;
         }
@@ -228,7 +228,7 @@ struct EvalStack
   }
   
   // evaluate recipe encoded by the op bitset and index \a idx within enumeration of numGraphs
-  linkRep evalRecipe(unsigned op, unsigned idx) const
+  linkRep evalRecipe(unsigned op, unsigned rollMask, unsigned idx) const
   {
     unsigned stackTop=0;
     auto nodes=data.elemStars.size();
@@ -239,7 +239,7 @@ struct EvalStack
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
     linkRep stack[maxStars];
-    for (unsigned p=0, opIdx=0, starIdx=2, range=5, ii=idx;
+    for (unsigned p=0, opIdx=0, starIdx=2, range=4, ii=idx;
          stackTop<=numStars && opIdx<numStars-1 && starIdx<recipeSize; ++p)
       if (p<2)
         stack[stackTop++]=elemStars[p];
@@ -254,8 +254,6 @@ struct EvalStack
                   stack[stackTop]=stack[stackTop-1];
                   ++stackTop;
                 }
-              else if (stackTop>1 && divResult.rem==range-2)
-                swap(stack[stackTop-1], stack[stackTop-2]); // swap top two elements of stack
               else if (divResult.rem<nodes)
                 stack[stackTop++]=elemStars[divResult.rem];
               else
@@ -274,12 +272,19 @@ struct EvalStack
                 stack[stackTop-1]&=v;
               else                   // set union
                 stack[stackTop-1]|=v;
+              if (rollMask&(1<<opIdx))
+                { // circular shift ("roll") stack
+                  auto top=stack[stackTop-1];
+                  memmove(stack+stackTop-1, stack+stackTop-2, stackTop-1);
+                  stack[0]=top;
+                }
             }
           ++opIdx;
         }
 
     assert(stackTop>=1);
     stack[0].op=op;
+    stack[0].rollMask=rollMask;
     stack[0].idx=idx;
     return stack[0];
   }
@@ -291,7 +296,7 @@ const linkRep noGraph=~linkRep(0);
 class OutputBuffer
 {
 public:
-  static constexpr size_t maxQ=20000;
+  static constexpr size_t maxQ=40000;
   using size_type=unsigned;
   using iterator=linkRep*;
   void push_back(linkRep x) {
@@ -340,10 +345,12 @@ struct BlockEvaluator: public EvalStackData
       {
         unsigned numOps=1<<(numStars-1);
         for (unsigned op=0; op<numOps; ++op)
-          {
-            auto r=block[i].evalRecipe(op,i+start);
-            if (!binary_search(alreadySeen.begin(),alreadySeen.end(),r))
-              result[i].push_back(r);
+          // no point rolling the stack for final 
+          for (unsigned rollMask=0; rollMask<numOps/4; ++rollMask)
+            {
+              auto r=block[i].evalRecipe(op,rollMask,i+start);
+              if (!binary_search(alreadySeen.begin(),alreadySeen.end(),r))
+                result[i].push_back(r);
           }
       }
   }
@@ -406,7 +413,7 @@ void StarComplexityGen::fillStarMap(unsigned numStars)
             if (res.first->second==numStars) // only count least star operations
               {
                 counts[k]++;
-                recipe.emplace(k, block->block[j].recipe(k.op, k.idx));
+                recipe.emplace(k, block->block[j].recipe(k.op, k.rollMask, k.idx));
               }
           }
       }
