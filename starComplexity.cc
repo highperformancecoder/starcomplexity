@@ -346,7 +346,7 @@ struct BlockEvaluator: public EvalStackData
         unsigned numOps=1<<(numStars-1);
         for (unsigned op=0; op<numOps; ++op)
           // no point rolling the stack for final 
-          for (unsigned rollMask=0; rollMask<numOps/4; ++rollMask)
+          for (unsigned rollMask=0; rollMask<numOps/2; ++rollMask)
             {
               auto r=block[i].evalRecipe(op,rollMask,i+start);
               if (!binary_search(alreadySeen.begin(),alreadySeen.end(),r))
