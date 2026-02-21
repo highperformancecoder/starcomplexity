@@ -199,7 +199,12 @@ struct EvalStack
           if (stackTop<numStars)
             {
               if (stackTop>0 && divResult.rem==range-1) // duplicate top of stack
-                r+="^";
+                {
+                  r+="^";
+                  if (rollMask&1)
+                    r+="↺";
+                  rollMask>>=1;
+                }
               else if (divResult.rem<nodes)
                 r+=to_string(divResult.rem)+";";
               else
@@ -219,12 +224,25 @@ struct EvalStack
               else                   // set union
                 r+="|";
               --stackTop;
-              if (rollMask&(1<<opIdx))
+              if (rollMask&1)
                 r+="↺";
+              rollMask>>=1;
             }
           ++opIdx;
         }
     return r;
+  }
+
+  // circular shift ("roll") stack
+  void rollStackIf(linkRep* stack, unsigned stackTop, unsigned& rollMask) const
+  {
+    if (rollMask&1)
+      {
+        auto top=stack[stackTop-1];
+        memmove(stack+1, stack, (stackTop-1)*sizeof(linkRep));
+        stack[0]=top;
+        rollMask>>=1;
+      }
   }
   
   // evaluate recipe encoded by the op bitset and index \a idx within enumeration of numGraphs
@@ -239,7 +257,7 @@ struct EvalStack
     auto elemStars=&data.elemStars[0];
     auto pos=&data.pos[0];
     linkRep stack[maxStars];
-    for (unsigned p=0, opIdx=0, starIdx=2, range=4, ii=idx;
+    for (unsigned p=0, opIdx=0, starIdx=2, range=4, ii=idx, rm=rollMask;
          stackTop<=numStars && opIdx<numStars-1 && starIdx<=recipeSize; ++p)
       if (p<2)
         stack[stackTop++]=elemStars[p];
@@ -253,6 +271,7 @@ struct EvalStack
                 {
                   stack[stackTop]=stack[stackTop-1];
                   ++stackTop;
+                  rollStackIf(stack, stackTop, rm);
                 }
               else if (divResult.rem<nodes)
                 stack[stackTop++]=elemStars[divResult.rem];
@@ -272,12 +291,7 @@ struct EvalStack
                 stack[stackTop-1]&=v;
               else                   // set union
                 stack[stackTop-1]|=v;
-              if (rollMask&(1<<opIdx))
-                { // circular shift ("roll") stack
-                  auto top=stack[stackTop-1];
-                  memmove(stack+1, stack+2, stackTop-1);
-                  stack[0]=top;
-                }
+              rollStackIf(stack, stackTop, rm);
             }
           ++opIdx;
         }
@@ -296,7 +310,7 @@ const linkRep noGraph=~linkRep(0);
 class OutputBuffer
 {
 public:
-  static constexpr size_t maxQ=1000000;
+  static constexpr size_t maxQ=10000000;
   using size_type=unsigned;
   using iterator=linkRep*;
   void push_back(linkRep x) {
